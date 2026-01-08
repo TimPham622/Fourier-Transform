@@ -8,8 +8,8 @@ struct FourierCoef {
     float re;
     float im;
     float freq;
-    float amp;   // Radius of the circle
-    float phase; // Starting angle
+    float amp;  
+    float phase; 
 };
 
 std::vector<FourierCoef> dft(const std::vector<Complex>& x);

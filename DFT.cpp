@@ -9,15 +9,12 @@ std::vector<FourierCoef> dft(const std::vector<Complex>& x) {
     
     X.reserve(N); 
 
-    // K is the frequency
     for (int k = 0; k < N; k++) {
         Complex sum(0, 0);
 
-        // Summation Formula
         for (int n = 0; n < N; n++) {
             float phi = (2 * PI * k * n) / N;
             
-            // Euler's Formula: e^-ix = cos(x) - i*sin(x)
             Complex c(std::cos(phi), -std::sin(phi));
             
             sum = sum + (x[n] * c);

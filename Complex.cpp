@@ -10,7 +10,6 @@ Complex Complex::operator-(const Complex& other) const {
     return Complex(re - other.re, im - other.im);
 }
 
-// (a + bi) * (c + di) = (ac - bd) + (ad + bc)i
 Complex Complex::operator*(const Complex& other) const {
     return Complex(
         re * other.re - im * other.im,

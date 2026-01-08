@@ -1,15 +1,13 @@
-# Compiler settings
-CXX = g++
-CXXFLAGS = -std=c++11 -Wall -Wno-missing-braces
+CXX := c++
+CXXFLAGS := -std=c++11 -Wall -Wno-missing-braces
+CXXFLAGS += $(shell pkg-config --cflags raylib)
 
-LDFLAGS = -lraylib -lGL -lm -lpthread -ldl -lrt -lX11
+LDFLAGS := $(shell pkg-config --libs raylib)
 
-# Project files
-SRC = main.cpp Complex.cpp DFT.cpp
-OBJ = $(SRC:.cpp=.o)
-TARGET = fourier_draw
+SRC := main.cpp Complex.cpp DFT.cpp FFT.cpp
+OBJ := $(SRC:.cpp=.o)
+TARGET := fourier
 
-# Build rules
 all: $(TARGET)
 
 $(TARGET): $(OBJ)

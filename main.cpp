@@ -1,117 +1,268 @@
 #include "raylib.h"
+#include "raymath.h"
 #include "Complex.h"
-#include "DFT.h"
+#include "DFT.h"   
+#include "FFT.h"    
 #include <vector>
-#include <algorithm> // For std::sort
+#include <algorithm>
 #include <cmath>
+#include <complex>   
 
-const int SCREEN_WIDTH = 1200;
+const int SCREEN_WIDTH = 1512;
 const int SCREEN_HEIGHT = 800;
-const float PI = 3.14159265358979323846f;
+
+const int FFT_SIZE = 1024; 
+std::vector<std::complex<float>> audioBuffer(FFT_SIZE);
+int audioIndex = 0;
+
+void ProcessAudio(void *bufferData, unsigned int frames) {
+    float *samples = (float *)bufferData;
+
+    for (unsigned int i = 0; i < frames; i++) {
+        if (audioIndex < FFT_SIZE) {
+            audioBuffer[audioIndex] = std::complex<float>(samples[i * 2], 0.0f);
+            audioIndex++;
+        }
+    }
+}
 
 bool compareAmp(const FourierCoef& a, const FourierCoef& b) {
     return a.amp > b.amp;
 }
 
+Color Checkered(int i) {
+    return (i % 2 == 0) ? ORANGE : GOLD;
+}
+
 int main() {
-    InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "Fourier Epicycles - Draw with Mouse!");
+    InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "Fourier Playground");
+    InitAudioDevice(); 
     SetTargetFPS(60);
 
-    enum State { USER_DRAWING, CALCULATING, ANIMATING };
-    State currentState = USER_DRAWING;
+    enum AppState { MENU, EPICYCLES, VISUALIZER };
+    AppState currentState = MENU;
 
-    std::vector<Complex> drawing;           
-    std::vector<FourierCoef> fourierX;   
-    std::vector<Vector2> path;              
+    std::vector<Complex> drawing;
+    std::vector<FourierCoef> fourierX;
+    std::vector<Vector2> path;
     float time = 0;
+    bool isEpicycleCalculating = false;
+    Camera2D camera = { 0 };
+    camera.zoom = 1.0f;
+    camera.offset = (Vector2){ SCREEN_WIDTH/2.0f, SCREEN_HEIGHT/2.0f };
+    camera.target = (Vector2){ SCREEN_WIDTH/2.0f, SCREEN_HEIGHT/2.0f };
+
+    Music music = LoadMusicStream("song.mp3");
+    music.looping = true;
+    AttachAudioStreamProcessor(music.stream, ProcessAudio);
+    float smoothBass = 0.0f; 
 
     while (!WindowShouldClose()) {
+        
+        if (IsKeyPressed(KEY_BACKSPACE)) {
+            currentState = MENU;
+            StopMusicStream(music); 
+        }
+
         BeginDrawing();
         ClearBackground(BLACK);
 
-        if (currentState == USER_DRAWING) {
-            DrawText("Draw a continuous line. Right Click to Process.", 10, 10, 20, RAYWHITE);
+        switch (currentState) {
             
-            // Input Logic
-            if (IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
-                Vector2 mouse = GetMousePosition();
-                if (drawing.empty() || 
-                    (drawing.back().re != mouse.x || drawing.back().im != mouse.y)) {
-                    drawing.push_back(Complex(mouse.x, mouse.y));
+            case MENU: {
+                DrawText("THE FOURIER PLAYGROUND", 350, 200, 50, WHITE);
+                DrawText("Epicycle Drawing Machine", 400, 350, 30, YELLOW);
+                DrawText("Audio Visualiser", 400, 400, 30, GREEN);
+                DrawText("[Select with Number Keys]", 450, 600, 20, DARKGRAY);
+
+                if (IsKeyPressed(KEY_ONE)) {
+                    currentState = EPICYCLES;
+                    camera.zoom = 1.0f;
+                    camera.target = (Vector2){ SCREEN_WIDTH/2.0f, SCREEN_HEIGHT/2.0f };
                 }
-            }
-            for (size_t i = 0; i < drawing.size(); i++) {
-                DrawPixel(drawing[i].re, drawing[i].im, YELLOW);
-            }
-
-            if (IsMouseButtonPressed(MOUSE_BUTTON_RIGHT) && drawing.size() > 0) {
-                currentState = CALCULATING;
-            }
-        } 
-        else if (currentState == CALCULATING) {
-            DrawText("Calculating DFT...", SCREEN_WIDTH/2 - 50, SCREEN_HEIGHT/2, 20, RAYWHITE);
-            
-            fourierX = dft(drawing);
-            
-            std::sort(fourierX.begin(), fourierX.end(), compareAmp);
-            
-            currentState = ANIMATING;
-            time = 0;
-            path.clear();
-        } 
-        else if (currentState == ANIMATING) {
-            DrawText("Press SPACE to reset", 10, 10, 20, DARKGRAY);
-
-            Vector2 v = {0, 0}; 
-            
-            for (size_t i = 0; i < fourierX.size(); i++) {
-                Vector2 prevObj = v;
-                
-                float freq = fourierX[i].freq;
-                float radius = fourierX[i].amp;
-                float phase = fourierX[i].phase;
-
-                float theta = freq * time + phase + (PI / 2); 
-                
-                float x = radius * std::cos(theta);
-                float y = radius * std::sin(theta);
-                
-                v.x += x;
-                v.y += y;
-
-                if (radius > 1.0f) {
-                    DrawCircleLines(prevObj.x, prevObj.y, radius, Fade(WHITE, 0.3f));
-                    DrawLineV(prevObj, v, Fade(WHITE, 0.5f));
+                if (IsKeyPressed(KEY_TWO)) {
+                    currentState = VISUALIZER;
+                    PlayMusicStream(music);
+                    audioIndex = 0;
                 }
+                break;
             }
 
-            path.insert(path.begin(), v); 
-            
-            if(path.size() > 5000) path.pop_back();
 
-            for (size_t i = 0; i < path.size() - 1; i++) {
-                DrawLineV(path[i], path[i+1], YELLOW);
+            case EPICYCLES: {
+                float targetZoom = 1.0f;
+                bool rightDragPanning = false;
+                Vector2 rightDragAccum = {0,0};
+                float wheel = GetMouseWheelMove();
+
+                if (IsKeyPressed(KEY_R)) {
+                    camera.zoom = 1.0f;
+                    targetZoom = 1.0f;
+                    camera.target = (Vector2){ SCREEN_WIDTH/2.0f, SCREEN_HEIGHT/2.0f };
+                }
+
+
+                if (wheel != 0) camera.zoom += wheel * 0.1f;
+                if (wheel != 0.0f) {
+
+                Vector2 mouseScreen = GetMousePosition();
+                Vector2 mouseWorldBefore = GetScreenToWorld2D(mouseScreen, camera);
+
+                float zoomFactor = 1.0f + wheel * 0.15f; 
+                targetZoom = Clamp(targetZoom * zoomFactor, 0.1f, 10.0f);
+
+                camera.zoom = targetZoom;
+
+                Vector2 mouseWorldAfter = GetScreenToWorld2D(mouseScreen, camera);
+
+                Vector2 delta = Vector2Subtract(mouseWorldBefore, mouseWorldAfter);
+                camera.target = Vector2Add(camera.target, delta);
+                }
+
+                if (IsMouseButtonPressed(MOUSE_BUTTON_RIGHT)) {
+                    rightDragPanning = false;
+                    rightDragAccum = (Vector2){0,0};
+                }
+
+                if (IsMouseButtonDown(MOUSE_BUTTON_RIGHT)) {
+                    Vector2 d = GetMouseDelta();
+                    rightDragAccum = Vector2Add(rightDragAccum, d);
+
+                    if (Vector2Length(rightDragAccum) > 6.0f) {
+                        rightDragPanning = true;
+                    }
+
+                    if (rightDragPanning) {
+                        camera.target.x -= d.x / camera.zoom;
+                        camera.target.y -= d.y / camera.zoom;
+                    }
+                }
+
+                if (IsMouseButtonDown(MOUSE_BUTTON_MIDDLE)) {
+                    Vector2 delta = GetMouseDelta();
+                    camera.target.x -= delta.x / camera.zoom;
+                    camera.target.y -= delta.y / camera.zoom;
+                }
+
+
+                BeginMode2D(camera);
+                
+                if (!isEpicycleCalculating && fourierX.empty()) {
+
+                    if (IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
+                        Vector2 mouseRaw = GetMousePosition();
+                        Vector2 mouse = GetScreenToWorld2D(mouseRaw, camera);
+                        if (drawing.empty()) drawing.push_back(Complex(mouse.x, mouse.y));
+                        else {
+                            float dx = mouse.x - drawing.back().re;
+                            float dy = mouse.y - drawing.back().im;
+                            if (dx*dx + dy*dy > 25) drawing.push_back(Complex(mouse.x, mouse.y));
+                        }
+                    }
+                    for (auto& p : drawing) DrawPixel(p.re, p.im, YELLOW);
+                    if (IsMouseButtonReleased(MOUSE_BUTTON_RIGHT) && !rightDragPanning && !drawing.empty()) {
+                    isEpicycleCalculating = true;
+                    }
+
+                }
+                else if (isEpicycleCalculating) {
+                    DrawText("Calculating...", camera.target.x, camera.target.y, 20, WHITE);
+                    fourierX = dft(drawing); 
+                    std::sort(fourierX.begin(), fourierX.end(), compareAmp);
+                    isEpicycleCalculating = false;
+                    time = 0;
+                    path.clear();
+                }
+                else {
+                    Vector2 v = {0,0};
+                    for (size_t i = 1; i < fourierX.size(); i++) {
+                        Vector2 prev = v;
+                        float theta = fourierX[i].freq * time + fourierX[i].phase;
+                        v.x += fourierX[i].amp * std::cos(theta);
+                        v.y += fourierX[i].amp * std::sin(theta);
+                        if(fourierX[i].amp > 1.0f) {
+                            DrawCircleLines(prev.x, prev.y, fourierX[i].amp, Fade(WHITE, 0.2f));
+                            DrawLineV(prev, v, Fade(WHITE, 0.2f));
+                        }
+                    }
+                    path.insert(path.begin(), v);
+                    if (path.size() > 2000) path.pop_back();
+                    for (size_t i = 0; i < path.size() - 1; i++) DrawLineV(path[i], path[i+1], YELLOW);
+                    
+                    time += (2 * PI) / fourierX.size();
+                    if (time > 2 * PI) { time = 0; path.clear(); }
+                    
+                    if (IsKeyPressed(KEY_SPACE)) {
+                        drawing.clear(); fourierX.clear(); path.clear();
+                    }
+                }
+                EndMode2D();
+                
+                DrawText("Backspace: Return to Menu", 10, 10, 20, GRAY);
+                break;
             }
 
-            float dt = (2 * PI) / fourierX.size();
-            time += dt;
+            case VISUALIZER: {
+                UpdateMusicStream(music);
 
-            if (time > 2 * PI) {
-                time = 0;
-                path.clear();
-            }
-            
-            if (IsKeyPressed(KEY_SPACE)) {
-                currentState = USER_DRAWING;
-                drawing.clear();
-                path.clear();
-                fourierX.clear();
+                if (audioIndex >= FFT_SIZE) {
+                    std::vector<std::complex<float>> processingBuffer = audioBuffer;
+                    
+                    fft(processingBuffer); 
+
+                    Vector2 center = { SCREEN_WIDTH / 2.0f, SCREEN_HEIGHT / 2.0f };
+                    
+                    float currentBass = 0;
+                    for(int i=0; i<10; i++) currentBass += std::abs(processingBuffer[i]);
+                    smoothBass = Lerp(smoothBass, currentBass, 0.1f); 
+                    
+                    float bassVis = Clamp(smoothBass*0.5f, 0.0f, 100.0f);
+                    Color c = ColorFromHSV(20.0f + bassVis*2.0f, 0.9f, 1.0f);
+
+                    DrawCircleV(center, 50 + smoothBass, Fade(c, 0.8f));
+                    DrawCircleLines(center.x, center.y, 50 + smoothBass, c);
+
+                    int maxFreq = FFT_SIZE / 2;
+                    float angleStep = 360.0f / maxFreq;
+
+                    for (int i = 0; i < maxFreq; i++) {
+                        float amp = std::abs(processingBuffer[i]);
+                        
+                        float height = std::log(amp + 1) * 40.0f; 
+
+                        if (height < 2.0f) continue;
+
+                        float angle = i * angleStep;
+                        float rad = (angle * PI) / 180.0f;
+                        
+                        float startRadius = 60 + smoothBass;
+                        Vector2 start = {
+                            center.x + std::cos(rad) * startRadius,
+                            center.y + std::sin(rad) * startRadius
+                        };
+                        Vector2 end = {
+                            center.x + std::cos(rad) * (startRadius + height),
+                            center.y + std::sin(rad) * (startRadius + height)
+                        };
+
+                        DrawLineEx(start, end, 2.0f, Checkered(i));
+                    }
+                    
+                    audioIndex = 0;
+                }
+                
+                DrawText("Playing: song.mp3", 10, SCREEN_HEIGHT - 30, 20, GREEN);
+                DrawText("Backspace: Return to Menu", 10, 10, 20, GRAY);
+                break;
             }
         }
 
         EndDrawing();
     }
 
+    UnloadMusicStream(music);
+    CloseAudioDevice();
     CloseWindow();
     return 0;
 }
+
