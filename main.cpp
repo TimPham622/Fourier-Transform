@@ -20,7 +20,8 @@ void ProcessAudio(void *bufferData, unsigned int frames) {
 
     for (unsigned int i = 0; i < frames; i++) {
         if (audioIndex < FFT_SIZE) {
-            audioBuffer[audioIndex] = std::complex<float>(samples[i * 2], 0.0f);
+            float leftChannel = samples[i];
+            audioBuffer[audioIndex] = std::complex<float>(leftChannel, 0.0f);
             audioIndex++;
         }
     }
