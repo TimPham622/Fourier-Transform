@@ -7,9 +7,12 @@ A C++ project which utilises one of my favourite concepts in mathematics, the **
 *   The engine calculates the complex Fourier Series of your path.
 *   Reconstructs your drawing using a chain of rotating vectors (epicycles).
 
+![Demonstration Image of the epicycle drawer](DEMO2.png)
 ### Audio Visualiser
 *   Implements the **Cooley-Tukey FFT** algorithm to analyze audio
 *   Low frequencies pulse in the center and high frequencies spike outwards.
+
+![Demonstration Image, where I have based the design off of NCS videos](DEMO1.png)
 
 ### Discrete Fourier Transform (DFT)
 Used in the **Drawing Machine**. It treats the 2D path as a series of complex numbers ($x_n$) and calculates the frequency ($X_k$):
@@ -23,11 +26,7 @@ Used in the **Audio Visualizer**. Because audio buffers are large (1024+ samples
 *   **Library:** [Raylib](https://www.raylib.com/)
 
 ### Build Instructions
-1.  Clone the repository:
-    ```bash
-    git clone https://github.com/yourusername/fourier-suite.git
-    cd fourier-suite
-    ```
+1.  Clone the repository
 2.  Compile using Make:
     ```bash
     make
