@@ -39,6 +39,7 @@ int main() {
     InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "Fourier Playground");
     InitAudioDevice(); 
     SetTargetFPS(60);
+    Texture2D bgTexture = LoadTexture("background.jpg");
 
     enum AppState { MENU, EPICYCLES, VISUALIZER };
     AppState currentState = MENU;
@@ -206,50 +207,67 @@ int main() {
             case VISUALIZER: {
                 UpdateMusicStream(music);
 
+                static std::vector<float> smoothedBars(FFT_SIZE / 2, 0.0f);
+                static float targetBass = 0.0f;
+                
+                Rectangle sourceRec = { 0.0f, 0.0f, (float)bgTexture.width, (float)bgTexture.height };
+                Rectangle destRec = { 0.0f, 0.0f, (float)SCREEN_WIDTH, (float)SCREEN_HEIGHT };
+                DrawTexturePro(bgTexture, sourceRec, destRec, {0,0}, 0.0f, WHITE);
+                DrawRectangle(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, Fade(BLACK, 0.5f));
+
                 if (audioIndex >= FFT_SIZE) {
                     std::vector<std::complex<float>> processingBuffer = audioBuffer;
-                    
                     fft(processingBuffer); 
 
-                    Vector2 center = { SCREEN_WIDTH / 2.0f, SCREEN_HEIGHT / 2.0f };
-                    
                     float currentBass = 0;
-                    for(int i=0; i<10; i++) currentBass += std::abs(processingBuffer[i]);
-                    smoothBass = Lerp(smoothBass, currentBass, 0.1f); 
-                    
-                    float bassVis = Clamp(smoothBass*0.5f, 0.0f, 100.0f);
-                    Color c = ColorFromHSV(20.0f + bassVis*2.0f, 0.9f, 1.0f);
+                    for(int i=0; i<15; i++) currentBass += std::abs(processingBuffer[i]);
+                    targetBass = currentBass; 
 
-                    DrawCircleV(center, 50 + smoothBass, Fade(c, 0.8f));
-                    DrawCircleLines(center.x, center.y, 50 + smoothBass, c);
-
-                    int maxFreq = FFT_SIZE / 2;
-                    float angleStep = 360.0f / maxFreq;
-
-                    for (int i = 0; i < maxFreq; i++) {
+                    for (int i = 0; i < FFT_SIZE / 2; i++) {
                         float amp = std::abs(processingBuffer[i]);
+                        float targetHeight = std::log(amp + 1.0f) * 80.0f; 
                         
-                        float height = std::log(amp + 1) * 40.0f; 
-
-                        if (height < 2.0f) continue;
-
-                        float angle = i * angleStep;
-                        float rad = (angle * PI) / 180.0f;
-                        
-                        float startRadius = 60 + smoothBass;
-                        Vector2 start = {
-                            center.x + std::cos(rad) * startRadius,
-                            center.y + std::sin(rad) * startRadius
-                        };
-                        Vector2 end = {
-                            center.x + std::cos(rad) * (startRadius + height),
-                            center.y + std::sin(rad) * (startRadius + height)
-                        };
-
-                        DrawLineEx(start, end, 2.0f, Checkered(i));
+                        smoothedBars[i] = Lerp(smoothedBars[i], targetHeight, 0.2f);
                     }
                     
                     audioIndex = 0;
+                }
+
+                smoothBass = Lerp(smoothBass, targetBass, 0.1f);
+
+                float bassVis = Clamp(smoothBass*0.5f, 0.0f, 100.0f);
+                Color c = ColorFromHSV(20.0f + bassVis*2.0f, 0.9f, 0.7f);
+
+                Vector2 center = { SCREEN_WIDTH / 2.0f, SCREEN_HEIGHT / 2.0f };
+                
+                float circleRadius = 50 + smoothBass;
+
+                DrawCircleV(center, circleRadius, Fade(c, 0.65f));
+                DrawCircleLines(center.x, center.y, circleRadius, c);
+
+                int maxFreq = FFT_SIZE / 2;
+                float angleStep = 360.0f / maxFreq;
+
+                for (int i = 0; i < maxFreq; i++) {
+                    float height = smoothedBars[i]; 
+
+                    if (height < 2.0f) continue;
+
+                    float angle = i * angleStep;
+                    float rad = (angle * PI) / 180.0f;
+                    
+                    float startRadius = circleRadius + 10.0f; 
+                    
+                    Vector2 start = {
+                        center.x + std::cos(rad) * startRadius,
+                        center.y + std::sin(rad) * startRadius
+                    };
+                    Vector2 end = {
+                        center.x + std::cos(rad) * (startRadius + height),
+                        center.y + std::sin(rad) * (startRadius + height)
+                    };
+
+                    DrawLineEx(start, end, 2.0f, Checkered(i));
                 }
                 
                 DrawText("Playing: song.mp3", 10, SCREEN_HEIGHT - 30, 20, GREEN);
@@ -260,7 +278,7 @@ int main() {
 
         EndDrawing();
     }
-
+    UnloadTexture(bgTexture);
     UnloadMusicStream(music);
     CloseAudioDevice();
     CloseWindow();
