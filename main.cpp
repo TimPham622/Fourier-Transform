@@ -32,7 +32,7 @@ bool compareAmp(const FourierCoef& a, const FourierCoef& b) {
 }
 
 Color Checkered(int i) {
-    return (i % 2 == 0) ? ORANGE : GOLD;
+    return (i % 2 == 0) ? GREEN : BLUE;
 }
 
 int main() {
@@ -236,11 +236,11 @@ int main() {
                 smoothBass = Lerp(smoothBass, targetBass, 0.1f);
 
                 float bassVis = Clamp(smoothBass*0.5f, 0.0f, 100.0f);
-                Color c = ColorFromHSV(20.0f + bassVis*2.0f, 0.9f, 0.7f);
+                Color c = ColorFromHSV(20.0f + bassVis*2.0f, 0.7f, 0.7f);
 
                 Vector2 center = { SCREEN_WIDTH / 2.0f, SCREEN_HEIGHT / 2.0f };
                 
-                float circleRadius = 50 + smoothBass;
+                float circleRadius = smoothBass;
 
                 DrawCircleV(center, circleRadius, Fade(c, 0.65f));
                 DrawCircleLines(center.x, center.y, circleRadius, c);
